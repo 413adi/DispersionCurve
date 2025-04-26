@@ -398,6 +398,19 @@
             // Create new chart with explicit dimensions
             try {
                 const newCtx = document.getElementById('dispersionChart').getContext('2d');
+                
+                // Debug information for Chrome
+                console.log("Canvas dimensions:", 
+                    document.getElementById('dispersionChart').width,
+                    document.getElementById('dispersionChart').height,
+                    document.getElementById('dispersionChart').style.width,
+                    document.getElementById('dispersionChart').style.height
+                );
+                
+                // Set explicit width and height for the canvas element
+                document.getElementById('dispersionChart').width = 800;
+                document.getElementById('dispersionChart').height = 500;
+                
                 window.dispersionChart = new Chart(newCtx, {
                     type: 'line', // Changed from scatter to line
                     data: {
@@ -470,8 +483,97 @@
             statusElement.className = '';
         }
         
-        // Add calculation timing
+                    // Add calculation timing
         let calculationStartTime;
+        
+        // Fallback for Chrome compatibility
+        function setupChromeFallback() {
+            const chromeDetected = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+            if (chromeDetected) {
+                console.log("Chrome detected - using fallback rendering");
+                return true;
+            }
+            return false;
+        }
+        
+        // Create a fallback plot function using HTML table for Chrome
+        function createFallbackTable(data) {
+            // Remove any existing table
+            const oldTable = document.getElementById('fallbackTable');
+            if (oldTable) oldTable.remove();
+            
+            // Create container if it doesn't exist
+            let fallbackContainer = document.getElementById('fallbackContainer');
+            if (!fallbackContainer) {
+                fallbackContainer = document.createElement('div');
+                fallbackContainer.id = 'fallbackContainer';
+                document.querySelector('.result-section').appendChild(fallbackContainer);
+            }
+            
+            // Create a message
+            const message = document.createElement('div');
+            message.innerHTML = '<p style="text-align: center; font-weight: bold;">Data displayed in table format for Chrome compatibility</p>';
+            fallbackContainer.appendChild(message);
+            
+            // Create table
+            const table = document.createElement('table');
+            table.id = 'fallbackTable';
+            table.style.width = '100%';
+            table.style.borderCollapse = 'collapse';
+            table.style.marginTop = '20px';
+            
+            // Create header row
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            
+            const kHeader = document.createElement('th');
+            kHeader.textContent = 'Wavenumber (mm⁻¹)';
+            kHeader.style.padding = '8px';
+            kHeader.style.backgroundColor = '#f2f2f2';
+            kHeader.style.borderBottom = '2px solid #ddd';
+            headerRow.appendChild(kHeader);
+            
+            data.modeNames.forEach(name => {
+                const th = document.createElement('th');
+                th.textContent = name + ' Mode (MHz)';
+                th.style.padding = '8px';
+                th.style.backgroundColor = '#f2f2f2';
+                th.style.borderBottom = '2px solid #ddd';
+                headerRow.appendChild(th);
+            });
+            
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            
+            // Create body rows (sample of data points)
+            const tbody = document.createElement('tbody');
+            
+            // Only show a subset of points to keep the table manageable
+            const step = Math.max(1, Math.floor(data.kValues.length / 20));
+            
+            for (let i = 0; i < data.kValues.length; i += step) {
+                const row = document.createElement('tr');
+                
+                const kCell = document.createElement('td');
+                kCell.textContent = (data.kValues[i] / 1000).toFixed(3);
+                kCell.style.padding = '8px';
+                kCell.style.borderBottom = '1px solid #ddd';
+                row.appendChild(kCell);
+                
+                for (let j = 0; j < data.modeNames.length; j++) {
+                    const cell = document.createElement('td');
+                    cell.textContent = (data.frequencies[i][j] / 1000000).toFixed(4);
+                    cell.style.padding = '8px';
+                    cell.style.borderBottom = '1px solid #ddd';
+                    row.appendChild(cell);
+                }
+                
+                tbody.appendChild(row);
+            }
+            
+            table.appendChild(tbody);
+            fallbackContainer.appendChild(table);
+        }
         
         // Main calculation function
         document.getElementById('calculate').addEventListener('click', function() {
@@ -525,8 +627,27 @@
                     // Update status before rendering
                     updateStatus('Rendering chart...', 'computing');
                     
-                    // Render chart
-                    renderChart(results);
+                    // Check if Chrome fallback is needed
+                    const needsFallback = setupChromeFallback();
+                    
+                    if (needsFallback) {
+                        try {
+                            // Try chart rendering first
+                            renderChart(results);
+                            
+                            // Also create fallback table as backup
+                            createFallbackTable(results);
+                        } catch (error) {
+                            console.error("Chart rendering failed, using fallback:", error);
+                            // Hide chart container if it fails
+                            document.querySelector('.chart-container').style.display = 'none';
+                            // Show fallback table
+                            createFallbackTable(results);
+                        }
+                    } else {
+                        // Regular chart rendering for other browsers
+                        renderChart(results);
+                    }
                     
                     // Calculate elapsed time
                     const calculationTime = ((performance.now() - calculationStartTime) / 1000).toFixed(2);
