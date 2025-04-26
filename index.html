@@ -495,4 +495,63 @@
             const rmax = parseFloat(document.getElementById('rmax').value);
             const kzMax = parseFloat(document.getElementById('kzmax').value);
             const kzStep = parseFloat(document.getElementById('kzstep').value);
-    
+            const n = parseInt(document.getElementById('n').value);
+            const numModes = parseInt(document.getElementById('modes').value);
+            
+            // Validate inputs
+            if (rmin >= rmax) {
+                updateStatus('Error: Inner radius must be less than outer radius', 'error');
+                document.getElementById('loading').style.display = 'none';
+                calculateButton.disabled = false;
+                calculateButton.textContent = 'Calculate Dispersion Curves';
+                return;
+            }
+            
+            // Status update for calculation start
+            updateStatus('Beginning calculation...', 'computing');
+            
+            // Use setTimeout to allow UI to update before starting calculation
+            setTimeout(function() {
+                try {
+                    // Update status to show calculation is in progress
+                    updateStatus('Computing dispersion curves...', 'computing');
+                    
+                    // Calculate results
+                    const results = calculateDispersionCurves({
+                        cL, cT, rho, rmin, rmax, 
+                        kzMax, kzStep, n, numModes
+                    });
+                    
+                    // Update status before rendering
+                    updateStatus('Rendering chart...', 'computing');
+                    
+                    // Render chart
+                    renderChart(results);
+                    
+                    // Calculate elapsed time
+                    const calculationTime = ((performance.now() - calculationStartTime) / 1000).toFixed(2);
+                    
+                    // Final status update
+                    updateStatus(`Calculation complete in ${calculationTime} seconds. Showing ${numModes} modes.`, 'complete');
+                    
+                } catch (error) {
+                    console.error('Calculation error:', error);
+                    updateStatus('Error: ' + error.message, 'error');
+                } finally {
+                    // Hide loading indicator
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    // Re-enable calculation button
+                    calculateButton.disabled = false;
+                    calculateButton.textContent = 'Calculate Dispersion Curves';
+                }
+            }, 100);
+        });
+        
+        // Initial calculation on page load
+        window.addEventListener('load', function() {
+            document.getElementById('calculate').click();
+        });
+    </script>
+</body>
+</html>
