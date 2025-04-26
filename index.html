@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cylindrical Tube Mode Calculator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .input-section {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .form-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #3367D6;
+        }
+        .chart-container {
+            height: 500px;
+            width: 100%;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .status-computing {
+            background-color: #FFF9C4;
+            color: #F57F17;
+        }
+        .status-complete {
+            background-color: #E8F5E9;
+            color: #2E7D32;
+        }
+        .status-error {
+            background-color: #FFEBEE;
+            color: #C62828;
+        }
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,0.2);
+            border-radius: 50%;
+            border-top-color: #4285F4;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .result-section {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Cylindrical Tube Mode Calculator</h1>
+        <p>This simplified tool calculates approximate dispersion curves for a cylindrical tube with given properties.</p>
+        
+        <div class="input-section">
+            <h2>Material Properties</h2>
+            <div class="form-group">
+                <label for="cL">Longitudinal wave speed (cL) [m/s]:</label>
+                <input type="number" id="cL" value="6320" min="1000" max="10000">
+            </div>
+            <div class="form-group">
+                <label for="cT">Transverse wave speed (cT) [m/s]:</label>
+                <input type="number" id="cT" value="3130" min="500" max="5000">
+            </div>
+            <div class="form-group">
+                <label for="rho">Density (rho) [kg/m³]:</label>
+                <input type="number" id="rho" value="2700" min="1000" max="10000">
+            </div>
+        </div>
+        
+        <div class="input-section">
+            <h2>Geometry</h2>
+            <div class="form-group">
+                <label for="rmin">Inner Radius (Rmin) [m]:</label>
+                <input type="number" id="rmin" value="0.014" min="0.001" max="0.1" step="0.001">
+            </div>
+            <div class="form-group">
+                <label for="rmax">Outer Radius (Rmax) [m]:</label>
+                <input type="number" id="rmax" value="0.016" min="0.001" max="0.1" step="0.001">
+            </div>
+        </div>
+        
+        <div class="input-section">
+            <h2>Calculation Parameters</h2>
+            <div class="form-group">
+                <label for="kzmax">Maximum Axial Wavenumber (kz_max) [m⁻¹]:</label>
+                <input type="number" id="kzmax" value="5000" min="1000" max="10000">
+            </div>
+            <div class="form-group">
+                <label for="kzstep">Wavenumber Step Size [m⁻¹]:</label>
+                <input type="number" id="kzstep" value="100" min="10" max="500">
+            </div>
+            <div class="form-group">
+                <label for="n">Azimuthal Wavenumber (n):</label>
+                <input type="number" id="n" value="0" min="0" max="10" step="1">
+            </div>
+            <div class="form-group">
+                <label for="modes">Number of Modes to Show:</label>
+                <input type="number" id="modes" value="3" min="1" max="5" step="1">
+            </div>
+        </div>
+        
+        <button id="calculate">Calculate Dispersion Curves</button>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div> Calculating... This may take a few seconds.
+        </div>
+        
+        <div id="status"></div>
+        
+        <div class="result-section">
+            <div class="chart-container" style="height: 500px; width: 100%;">
+                <canvas id="dispersionChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simplified version of the ModesMonolayerTube calculation
+        
+        // Class to handle finite difference schemes
+        class FDScheme {
+            constructor(order) {
+                this.order = order % 2 === 1 ? order + 1 : order;
+                this.calculateD1();
+                this.calculateD2();
+            }
+            
+            calculateD1() {
+                // Simplified calculation of first derivative coefficients
+                // This uses precomputed values for common orders
+                if (this.order === 4) {
+                    this.D1 = [
+                        [-25/12, 4, -3, 4/3, -1/4],
+                        [-1/4, -5/6, 3/2, -1/2, 1/12],
+                        [1/12, -2/3, 0, 2/3, -1/12],
+                        [-1/12, 1/2, -3/2, 5/6, 1/4],
+                        [1/4, -4/3, 3, -4, 25/12]
+                    ];
+                } else if (this.order === 6) {
+                    // Higher order coefficients would be defined here
+                    this.D1 = [
+                        [-49/20, 6, -15/2, 20/3, -15/4, 6/5, -1/6],
+                        [-1/6, -77/60, 5/2, -5/3, 5/6, -1/4, 1/30],
+                        [1/30, -2/5, -7/12, 4/3, -1/2, 2/15, -1/60],
+                        [-1/60, 3/20, -3/4, 0, 3/4, -3/20, 1/60],
+                        [1/60, -2/15, 1/2, -4/3, 7/12, 2/5, -1/30],
+                        [-1/30, 1/4, -5/6, 5/3, -5/2, 77/60, 1/6],
+                        [1/6, -6/5, 15/4, -20/3, 15/2, -6, 49/20]
+                    ];
+                } else {
+                    // Default to order 2 if not implemented
+                    this.D1 = [
+                        [-3/2, 2, -1/2],
+                        [-1/2, 0, 1/2],
+                        [1/2, -2, 3/2]
+                    ];
+                }
+            }
+            
+            calculateD2() {
+                // Simplified calculation of second derivative coefficients
+                if (this.order === 4) {
+                    this.D2 = [
+                        [35/12, -26/3, 19/2, -14/3, 11/12],
+                        [11/12, -5/3, 1/2, 1/3, -1/12],
+                        [-1/12, 4/3, -5/2, 4/3, -1/12],
+                        [-1/12, 1/3, 1/2, -5/3, 11/12],
+                        [11/12, -14/3, 19/2, -26/3, 35/12]
+                    ];
+                } else if (this.order === 6) {
+                    // Higher order coefficients would be defined here
+                    this.D2 = [
+                        [203/45, -87/5, 117/8, -254/15, 33/2, -27/5, 137/180],
+                        [137/180, -49/60, -17/12, 47/30, -19/20, 31/60, -13/180],
+                        [-13/180, 19/15, -7/3, 10/9, 1/12, -1/15, 1/90],
+                        [1/90, -3/20, 3/2, -49/18, 3/2, -3/20, 1/90],
+                        [1/90, -1/15, 1/12, 10/9, -7/3, 19/15, -13/180],
+                        [-13/180, 31/60, -19/20, 47/30, -17/12, -49/60, 137/180],
+                        [137/180, -27/5, 33/2, -254/15, 117/8, -87/5, 203/45]
+                    ];
+                } else {
+                    // Default to order 2
+                    this.D2 = [
+                        [1, -2, 1],
+                        [1, -2, 1],
+                        [1, -2, 1]
+                    ];
+                }
+            }
+        }
+        
+        // Function to calculate approximate dispersion curves
+        function calculateDispersionCurves(params) {
+            const { cL, cT, rho, rmin, rmax, kzMax, kzStep, n, numModes } = params;
+            
+            // Update status after receiving parameters
+            updateStatus('Initializing calculation...', 'computing');
+            
+            // Calculate Lamé parameters
+            const mu = rho * cT * cT;
+            const lambda = rho * cL * cL - 2 * mu;
+            
+            // Create array of axial wavenumbers
+            const kValues = [];
+            for (let k = 0; k <= kzMax; k += kzStep) {
+                kValues.push(k);
+            }
+            
+            // Use simplified model to approximate the dispersion curves
+            // This is a major simplification of the full 3D elasticity solution
+            
+            // For a thin cylindrical shell, we can use approximate formulas
+            // based on simplified shell theory
+            
+            const h = rmax - rmin;  // Shell thickness
+            const r = (rmax + rmin) / 2;  // Mean radius
+            
+            // Results array - will hold frequency for each mode and k value
+            const results = new Array(kValues.length);
+            for (let i = 0; i < results.length; i++) {
+                results[i] = new Array(numModes).fill(0);
+            }
+            
+            // Update status for computation phase
+            updateStatus(`Computing ${kValues.length} points for ${numModes} modes...`, 'computing');
+            
+            // Calculate progress updates at 25%, 50%, and 75%
+            const updatePoints = [
+                Math.floor(kValues.length * 0.25),
+                Math.floor(kValues.length * 0.5),
+                Math.floor(kValues.length * 0.75)
+            ];
+            
+            // Calculate approximate dispersion curves for different modes
+            for (let i = 0; i < kValues.length; i++) {
+                // Progress updates
+                if (updatePoints.includes(i)) {
+                    const percent = Math.round((i / kValues.length) * 100);
+                    updateStatus(`Computing... ${percent}% complete`, 'computing');
+                    
+                    // Add a small delay to allow UI to update
+                    // This is a trick to make the browser repaint the UI
+                    const start = performance.now();
+                    while (performance.now() - start < 10) {
+                        // Empty loop to force a small delay
+                    }
+                }
+                
+                const k = kValues[i];
+                
+                // Longitudinal mode (n=0, m=0)
+                results[i][0] = Math.sqrt(lambda + 2*mu) * k / (2 * Math.PI);
+                
+                // Flexural mode (n=1, m=0)
+                if (numModes > 1) {
+                    const omega_flex = Math.sqrt((k**4 * h**2 * (lambda + 2*mu) / (12 * rho)) + 
+                                               (k**2 * mu / rho));
+                    results[i][1] = omega_flex / (2 * Math.PI);
+                }
+                
+                // Torsional mode (n=0, m=1)
+                if (numModes > 2) {
+                    results[i][2] = Math.sqrt(mu / rho) * Math.sqrt(k**2 + (n**2)/r**2) / (2 * Math.PI);
+                }
+                
+                // Additional modes if needed
+                if (numModes > 3) {
+                    // Breathing mode (n=0, m=2)
+                    results[i][3] = Math.sqrt((lambda + 2*mu) / rho) * 
+                                    Math.sqrt(1/r**2 + k**2) / (2 * Math.PI);
+                }
+                
+                if (numModes > 4) {
+                    // Higher order mode
+                    results[i][4] = Math.sqrt(mu / rho) * 
+                                    Math.sqrt((n+2)**2/r**2 + k**2) / (2 * Math.PI);
+                }
+            }
+            
+            updateStatus('Calculation finished, preparing results...', 'computing');
+            
+            return {
+                kValues,
+                frequencies: results,
+                modeNames: [
+                    "Longitudinal",
+                    "Flexural",
+                    "Torsional",
+                    "Breathing",
+                    "Higher Order"
+                ].slice(0, numModes)
+            };
+        }
+        
+        // Chart rendering function
+        function renderChart(data) {
+            const ctx = document.getElementById('dispersionChart').getContext('2d');
+            
+            // Convert data to format needed by Chart.js
+            const datasets = data.modeNames.map((name, index) => {
+                // Generate a color based on the index
+                const hue = (index * 137) % 360;
+                const color = `hsl(${hue}, 70%, 60%)`;
+                
+                // Create array of points
+                const points = [];
+                for (let i = 0; i < data.kValues.length; i++) {
+                    points.push({
+                        x: data.frequencies[i][index] / 1000000, // Convert to MHz
+                        y: data.kValues[i] / 1000  // Convert to 1/mm
+                    });
+                }
+                
+                return {
+                    label: name + ' Mode',
+                    data: points,
+                    backgroundColor: color,
+                    borderColor: color,
+                    pointRadius: 0,
+                    borderWidth: 2
+                };
+            });
+            
+            // Explicitly set chart dimensions
+            const chartContainer = document.querySelector('.chart-container');
+            if (!chartContainer) {
+                const resultSection = document.querySelector('.result-section');
+                resultSection.innerHTML = '<div class="chart-container" style="height: 500px; width: 100%;"><canvas id="dispersionChart"></canvas></div>';
+            }
+            
+            // Log information for debugging
+            console.log("Chart data:", datasets);
+            console.log("Chart canvas found:", !!ctx);
+            
+            // Try to destroy previous chart if it exists
+            try {
+                if (window.dispersionChart instanceof Chart) {
+                    window.dispersionChart.destroy();
+                }
+            } catch (e) {
+                console.error("Error destroying previous chart:", e);
+                // If destroy fails, try to remove and recreate the canvas
+                const resultSection = document.querySelector('.result-section');
+                resultSection.innerHTML = '<div class="chart-container" style="height: 500px; width: 100%;"><canvas id="dispersionChart"></canvas></div>';
+            }
+            
+            // Create new chart with explicit dimensions
+            try {
+                const newCtx = document.getElementById('dispersionChart').getContext('2d');
+                window.dispersionChart = new Chart(newCtx, {
+                    type: 'line', // Changed from scatter to line
+                    data: {
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                position: 'bottom',
+                                title: {
+                                    display: true,
+                                    text: 'Frequency (MHz)',
+                                    font: {
+                                        size: 14
+                                    }
+                                },
+                                min: 0,
+                                max: 2.1
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Axial Wavenumber (mm⁻¹)',
+                                    font: {
+                                        size: 14
+                                    }
+                                },
+                                min: 0
+                            }
+                        },
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Dispersion Curves - Cylindrical Tube',
+                                font: {
+                                    size: 16
+                                }
+                            },
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+                
+                // Update status if chart was created successfully
+                if (window.dispersionChart) {
+                    updateStatus('Chart rendered successfully', 'complete');
+                }
+            } catch (e) {
+                console.error("Error creating chart:", e);
+                updateStatus('Error creating chart: ' + e.message, 'error');
+            }
+        }
+        
+        // Status update functions
+        function updateStatus(message, type) {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = message;
+            statusElement.className = '';
+            statusElement.classList.add('status-' + type);
+        }
+        
+        function clearStatus() {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = '';
+            statusElement.className = '';
+        }
+        
+        // Add calculation timing
+        let calculationStartTime;
+        
+        // Main calculation function
+        document.getElementById('calculate').addEventListener('click', function() {
+            // Show loading indicator
+            document.getElementById('loading').style.display = 'block';
+            clearStatus();
+            
+            // Disable calculation button
+            const calculateButton = document.getElementById('calculate');
+            calculateButton.disabled = true;
+            calculateButton.textContent = 'Computing...';
+            
+            // Reset start time
+            calculationStartTime = performance.now();
+            
+            // Get input values
+            const cL = parseFloat(document.getElementById('cL').value);
+            const cT = parseFloat(document.getElementById('cT').value);
+            const rho = parseFloat(document.getElementById('rho').value);
+            const rmin = parseFloat(document.getElementById('rmin').value);
+            const rmax = parseFloat(document.getElementById('rmax').value);
+            const kzMax = parseFloat(document.getElementById('kzmax').value);
+            const kzStep = parseFloat(document.getElementById('kzstep').value);
+    
